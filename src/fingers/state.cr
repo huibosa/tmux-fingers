@@ -1,5 +1,9 @@
+require "./types"
+
 module Fingers
   class State
+    @matched_target : Fingers::Target?
+
     def initialize
       @show_help = false
       @multi_mode = false
@@ -10,6 +14,7 @@ module Fingers
       @multi_matches = [] of String
       @result = ""
       @exiting = false
+      @matched_target = nil
     end
 
     property :show_help,
@@ -20,6 +25,7 @@ module Fingers
       :selected_matches,
       :multi_matches,
       :result,
-      :exiting
+      :exiting,
+      :matched_target
   end
 end

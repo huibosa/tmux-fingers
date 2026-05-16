@@ -8,7 +8,8 @@ module Fingers
       @modifier : String,
       @match : String,
       @hint : String,
-      @original_pane : Tmux::Pane,
+      @active_pane : Tmux::Pane,
+      @source_pane : Tmux::Pane,
       @offset : Tuple(Int32, Int32) | Nil,
       @mode : String,
       @main_action : String | Nil,
@@ -31,7 +32,7 @@ module Fingers
         input: :pipe,
         output: :pipe,
         error: File.open(::Fingers::Dirs::ROOT / "action-stderr", "a"),
-        chdir: original_pane.pane_current_path.presence,
+        chdir: source_pane.pane_current_path.presence,
         env: action_env
       )
 
@@ -39,7 +40,7 @@ module Fingers
       cmd.input.flush
     end
 
-    private getter :match, :modifier, :hint, :original_pane, :offset, :mode, :main_action, :ctrl_action, :alt_action, :shift_action
+    private getter :match, :modifier, :hint, :active_pane, :source_pane, :offset, :mode, :main_action, :ctrl_action, :alt_action, :shift_action
 
     def final_shell_command
       return jump if mode == "jump"
@@ -78,19 +79,20 @@ module Fingers
     def jump
       return nil if offset.nil?
 
-      `tmux copy-mode -t #{original_pane.pane_id}`
-      `tmux send-keys -t #{original_pane.pane_id} -X top-line`
-      `tmux send-keys -t #{original_pane.pane_id} -N #{offset.not_nil![0]} -X cursor-down`
-      `tmux send-keys -t #{original_pane.pane_id} -N #{offset.not_nil![1]} -X cursor-right`
+      `tmux select-pane -t #{source_pane.pane_id}`
+      `tmux copy-mode -t #{source_pane.pane_id}`
+      `tmux send-keys -t #{source_pane.pane_id} -X top-line`
+      `tmux send-keys -t #{source_pane.pane_id} -N #{offset.not_nil![0]} -X cursor-down`
+      `tmux send-keys -t #{source_pane.pane_id} -N #{offset.not_nil![1]} -X cursor-right`
 
       nil
     end
 
     def paste
-      if original_pane.pane_in_mode
-        "tmux send-keys -t #{original_pane.pane_id} -X cancel \; paste-buffer -t #{original_pane.pane_id}"
+      if active_pane.pane_in_mode
+        "tmux send-keys -t #{active_pane.pane_id} -X cancel \; paste-buffer -t #{active_pane.pane_id}"
       else
-        "tmux paste-buffer -t #{original_pane.pane_id}"
+        "tmux paste-buffer -t #{active_pane.pane_id}"
       end
     end
 
@@ -159,7 +161,7 @@ module Fingers
     def expanded_match
       return match unless should_expand_match?
 
-      Path[match].expand(base: original_pane.pane_current_path, home: Path.home)
+      Path[match].expand(base: source_pane.pane_current_path, home: Path.home)
     end
 
     private def should_expand_match?

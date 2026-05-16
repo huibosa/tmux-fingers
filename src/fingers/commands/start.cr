@@ -4,6 +4,7 @@ require "../hinter"
 require "../view"
 require "../state"
 require "../input_socket"
+require "../display_width"
 require "../../tmux"
 
 module Fingers::Commands
@@ -37,6 +38,9 @@ module Fingers::Commands
     @ctrl_action : String | Nil
     @shift_action : String | Nil
     @alt_action : String | Nil
+    @pane_pairs : Array(Tuple(Tmux::Pane, Tmux::Pane)) = [] of Tuple(Tmux::Pane, Tmux::Pane)
+    @hinter : Hinter | Nil
+    @target_pane : Tmux::Pane | Nil
 
     def setup : Nil
       @name = "start"
@@ -153,8 +157,17 @@ module Fingers::Commands
     end
 
     private def restore_last_pane
-      tmux.select_pane(@last_pane_id)
-      select_active_pane
+      # Default mode: end in active_pane, with @last_pane_id in tmux's {last} stack.
+      # Jump mode: end in the source pane (where the user wanted to navigate),
+      # with active_pane in the {last} stack so prefix+; returns to where they came from.
+      if mode == "jump" && (target = state.matched_target)
+        source = tmux.find_pane_by_id(target.source_pane_id) || active_pane
+        tmux.select_pane(active_pane.pane_id)
+        tmux.select_pane(source.pane_id)
+      else
+        tmux.select_pane(@last_pane_id)
+        tmux.select_pane(active_pane.pane_id)
+      end
     end
 
     private def options_to_preserve
@@ -164,32 +177,91 @@ module Fingers::Commands
     private def parse_pane_target_format!(pane_target_format)
       if pane_target_format.match(/^%[0-9]+$/)
         @pane_id = pane_target_format
-        @active_pane = target_pane
+        @target_pane = tmux.find_pane_by_id(@pane_id).not_nil!
+        @active_pane = @target_pane
       else
         @pane_id = tmux.exec("display-message -t #{pane_target_format} -p '\#{pane_id}'").chomp
+        @target_pane = tmux.find_pane_by_id(@pane_id).not_nil!
+        # Active pane = the currently-focused pane in the target's window
         @active_pane = tmux.list_panes("\#{pane_active}", target_pane.window_id).first
       end
     end
 
     private def show_hints
-      # It is very important to resize the window at this point to match the
-      # dimensions of the target pane. Otherwise weird linejumping will occur
-      # when we have wrapped lines.
-      tmux.resize_window(
-        fingers_window.window_id,
-        target_pane.pane_width,
-        target_pane.pane_height,
-      ) if needs_resize?
+      panes = target_panes
+      window_id = target_pane.window_id
 
-      # Swapping panes with -Z flag causes some issues with rendering panes
-      # with tabs or double width characters
-      if target_pane.window_zoomed_flag
-        tmux.swap_panes(fingers_window.pane_id, target_pane.pane_id)
+      # Build the fingers window with N panes mirroring source layout.
+      # The first reference to `fingers_window` triggers create_window.
+      (panes.size - 1).times do
+        tmux.split_window(fingers_window.window_id)
+      end
+
+      # Resize fingers window to match source window dimensions.
+      source_w = panes.max_of { |p| p.pane_left + p.pane_width }
+      source_h = panes.max_of { |p| p.pane_top + p.pane_height }
+      tmux.resize_window(fingers_window.window_id, source_w, source_h)
+
+      # Apply source layout to fingers window. For multi-pane this reproduces
+      # the source's pane geometry. For single-pane it's a no-op.
+      if panes.size > 1
+        source_layout = tmux.window_layout(window_id)
+        tmux.select_layout(fingers_window.window_id, source_layout)
+      end
+
+      # Read back fingers panes; pair to source panes by (pane_top, pane_left).
+      fingers_panes = tmux.list_panes("", fingers_window.window_id)
+      @pane_pairs = pair_panes_by_position(panes, fingers_panes)
+
+      # Repair any layout-rounding mismatches.
+      @pane_pairs.each do |src, fng|
+        if src.pane_width != fng.pane_width || src.pane_height != fng.pane_height
+          tmux.resize_pane(fng.pane_id, src.pane_width, src.pane_height)
+        end
+      end
+
+      # Re-fetch fingers panes after possible resize so PanePrinter has current ttys.
+      fingers_panes = tmux.list_panes("", fingers_window.window_id)
+      @pane_pairs = pair_panes_by_position(panes, fingers_panes)
+
+      # Build per-pane inputs with captured source content.
+      pane_inputs = @pane_pairs.map do |src, fng|
+        contents = tmux.capture_pane(src, join: mode != "jump").split("\n")
+        printer = PanePrinter.new(fng.pane_tty)
+        Fingers::PaneInput.new(
+          lines: contents,
+          printer: printer,
+          pane_id: src.pane_id,
+          width: src.pane_width.to_i,
+        )
+      end
+
+      @hinter = build_hinter(pane_inputs)
+
+      # Render order honors zoom: when source pane is zoomed, swap before render.
+      # For multi-pane, no source pane is zoomed (zoom collapses target_panes to [active]).
+      zoomed = target_pane.window_zoomed_flag
+
+      if zoomed
+        @pane_pairs.each { |src, fng| tmux.swap_panes(fng.pane_id, src.pane_id) }
         view.render
       else
         view.render
-        tmux.swap_panes(fingers_window.pane_id, target_pane.pane_id)
+        @pane_pairs.each { |src, fng| tmux.swap_panes(fng.pane_id, src.pane_id) }
       end
+    end
+
+    private def pair_panes_by_position(source_panes, fingers_panes)
+      fng_by_pos = {} of Tuple(Int32, Int32) => Tmux::Pane
+      fingers_panes.each { |p| fng_by_pos[{p.pane_top, p.pane_left}] = p }
+
+      pairs = [] of Tuple(Tmux::Pane, Tmux::Pane)
+      source_panes.each do |src|
+        fng = fng_by_pos[{src.pane_top, src.pane_left}]?
+        next unless fng
+        pairs << {src, fng}
+      end
+      pairs
     end
 
     private def handle_input
@@ -207,14 +279,16 @@ module Fingers::Commands
     private def process_result
       return unless state.result
 
-      match = hinter.lookup(state.input)
+      target = state.matched_target
+      source = target ? (tmux.find_pane_by_id(target.source_pane_id) || active_pane) : active_pane
 
       ActionRunner.new(
         hint: state.input,
         modifier: state.modifier,
         match: state.result,
-        original_pane: active_pane,
-        offset: match ? match.not_nil!.offset : nil,
+        active_pane: active_pane,
+        source_pane: source,
+        offset: target.try(&.offset),
         mode: mode,
         main_action: @main_action,
         ctrl_action: @ctrl_action,
@@ -225,28 +299,29 @@ module Fingers::Commands
       tmux.display_message("Copied: #{state.result}", 1000) if should_notify?
     end
 
-    private def select_active_pane
-      tmux.select_pane(active_pane.pane_id)
-    end
-
-    private def needs_resize?
-      pane_width = target_pane.pane_width.to_i
-      pane_contents.any? do |line|
-        line.bytesize > line.size || line.size > pane_width
-      end
-    end
-
     private def teardown
-      tmux.swap_panes(fingers_pane_id, target_pane.pane_id)
-      tmux.kill_pane(fingers_pane_id)
+      # Swap each pair back. Reverse order matches the swap-in order's mirror.
+      @pane_pairs.reverse_each do |src, fng|
+        tmux.swap_panes(fng.pane_id, src.pane_id)
+      end
+
+      tmux.kill_window(fingers_window.window_id)
 
       restore_last_pane
       restore_last_key_table
       restore_options
     end
 
+    private getter target_panes : Array(Tmux::Pane) do
+      if target_pane.window_zoomed_flag
+        [active_pane]
+      else
+        tmux.list_panes("", target_pane.window_id)
+      end
+    end
+
     private getter target_pane : Tmux::Pane do
-      tmux.find_pane_by_id(@pane_id).not_nil!
+      @target_pane.not_nil!
     end
 
     private getter active_pane : Tmux::Pane do
@@ -261,39 +336,27 @@ module Fingers::Commands
       tmux.create_window("[fingers]", "cat", 80, 24)
     end
 
-    private getter fingers_pane_id : String do
-      fingers_window.pane_id
-    end
-
-    private getter pane_printer : PanePrinter do
-      PanePrinter.new(fingers_window.pane_tty)
-    end
-
     private getter state : Fingers::State do
       ::Fingers::State.new
     end
 
-    private getter hinter : Hinter do
+    private def build_hinter(pane_inputs : Array(Fingers::PaneInput)) : Hinter
       Fingers::Hinter.new(
-        input: pane_contents,
+        pane_inputs: pane_inputs,
         patterns: @patterns,
-        width: target_pane.pane_width.to_i,
         state: state,
-        output: pane_printer,
         reuse_hints: mode != "jump",
       )
     end
 
-    private getter pane_contents : Array(String) do
-      tmux.capture_pane(target_pane, join: mode != "jump").split("\n")
+    private getter hinter : Hinter do
+      @hinter.not_nil!
     end
 
     private getter view : View do
       ::Fingers::View.new(
         hinter: hinter,
         state: state,
-        output: pane_printer,
-        original_pane: target_pane,
         tmux: tmux,
         mode: mode,
       )

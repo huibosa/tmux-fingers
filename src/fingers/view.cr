@@ -5,20 +5,13 @@ require "./action_runner"
 
 module Fingers
   class View
-    CLEAR_SEQ = "\e[H\e[J"
-    HIDE_CURSOR_SEQ = "\e[?25l"
-
     @hinter : Hinter
     @state : State
-    @output : Printer
-    @original_pane : Tmux::Pane
     @tmux : Tmux
     @mode : String
 
     def initialize(
       @hinter,
-      @output,
-      @original_pane,
       @state,
       @tmux,
       @mode,
@@ -26,9 +19,6 @@ module Fingers
     end
 
     def render
-      clear_screen
-      hide_cursor
-
       begin
         hinter.run
       rescue e
@@ -54,14 +44,6 @@ module Fingers
       end
     end
 
-    private def hide_cursor
-      output.print HIDE_CURSOR_SEQ
-    end
-
-    private def clear_screen
-      output.print CLEAR_SEQ
-    end
-
     private def process_hint(char, modifier)
       state.input += char
       state.modifier = modifier
@@ -71,6 +53,7 @@ module Fingers
       if match.nil?
         render
       else
+        state.matched_target = match
         handle_match(match.not_nil!.text)
       end
     end
@@ -88,7 +71,7 @@ module Fingers
       end
     end
 
-    private getter :output, :hinter, :original_pane, :state, :tmux, :mode
+    private getter :hinter, :state, :tmux, :mode
 
     private def handle_match(match)
       if state.multi_mode

@@ -2,18 +2,13 @@ require "../huffman"
 require "./config"
 require "./match_formatter"
 require "./types"
+require "./display_width"
 
 module Fingers
-  struct Target
-    property text : String
-    property hint : String
-    property offset : Tuple(Int32, Int32)
-
-    def initialize(@text, @hint, @offset)
-    end
-  end
-
   class Hinter
+    CLEAR_SEQ = "\e[H\e[J"
+    HIDE_CURSOR_SEQ = "\e[?25l"
+
     @formatter : Formatter
     @patterns : Array(String)
     @alphabet : Array(String)
@@ -21,37 +16,54 @@ module Fingers
     @hints : Array(String) | Nil
     @n_matches : Int32 | Nil
     @reuse_hints : Bool
+    @current_printer : Printer | Nil
+    @current_pane_id : String
+    @current_width : Int32
 
     def initialize(
-      input : Array(String),
-      width : Int32,
+      pane_inputs : Array(PaneInput),
       state : Fingers::State,
-      output : Printer,
       patterns = Fingers.config.patterns,
       alphabet = Fingers.config.alphabet,
       huffman = Huffman.new,
       formatter = ::Fingers::MatchFormatter.new,
       reuse_hints = false
     )
-      @lines = input
-      @width = width
+      @pane_inputs = pane_inputs
       @target_by_hint = {} of String => Target
       @target_by_text = {} of String => Target
       @state = state
-      @output = output
       @formatter = formatter
       @huffman = huffman
       @patterns = patterns
       @alphabet = alphabet
       @reuse_hints = reuse_hints
+      @current_printer = nil
+      @current_pane_id = ""
+      @current_width = 0
     end
 
     def run
       regenerate_hints!
-      lines[0..-2].each_with_index { |line, index| process_line(line, index, "\n") }
-      process_line(lines[-1], lines.size - 1, "")
 
-      output.flush
+      @pane_inputs.each do |pane_input|
+        @current_printer = pane_input.printer
+        @current_pane_id = pane_input.pane_id
+        @current_width = pane_input.width
+        lines = pane_input.lines
+
+        pane_input.printer.print(CLEAR_SEQ + HIDE_CURSOR_SEQ)
+
+        if lines.empty?
+          pane_input.printer.flush
+          next
+        end
+
+        lines[0..-2].each_with_index { |line, index| process_line(line, index, "\n") }
+        process_line(lines[-1], lines.size - 1, "")
+
+        pane_input.printer.flush
+      end
     end
 
     def lookup(hint) : Target | Nil
@@ -65,16 +77,23 @@ module Fingers
       :offsets_by_hint,
       :input,
       :lookup_table,
-      :width,
       :state,
       :formatter,
       :huffman,
-      :output,
       :patterns,
       :alphabet,
       :reuse_hints,
       :target_by_hint,
-      :target_by_text
+      :target_by_text,
+      :pane_inputs
+
+    def output : Printer
+      @current_printer.not_nil!
+    end
+
+    def width : Int32
+      @current_width
+    end
 
     def process_line(line, line_index, ending)
       tab_positions = tab_positions_for(line)
@@ -84,8 +103,8 @@ module Fingers
       tab_correction = result.size - initial_length
 
       result = Fingers.config.backdrop_style + result
-      double_width_correction = ((line.bytesize - line.size) / 3).round.to_i
-      padding_amount = (width - line.size - double_width_correction - tab_correction)
+      display_w = Fingers::DisplayWidth.of(line)
+      padding_amount = (width - display_w - tab_correction)
       padding = padding_amount > 0 ? " " * padding_amount : ""
       output.print(result + padding + ending)
     end
@@ -176,7 +195,7 @@ module Fingers
     end
 
     def build_target(text, hint, offset)
-      target = Target.new(text, hint, offset)
+      target = Target.new(text, hint, offset, @current_pane_id)
 
       target_by_hint[hint] = target
       target_by_text[text] = target
@@ -209,9 +228,11 @@ module Fingers
     def count_unique_matches
       match_set = Set(String).new
 
-      lines.each do |line|
-        line.scan(pattern) do |match|
-          match_set.add(captured_text_for_match(match))
+      pane_inputs.each do |pane_input|
+        pane_input.lines.each do |line|
+          line.scan(pattern) do |match|
+            match_set.add(captured_text_for_match(match))
+          end
         end
       end
 
@@ -223,9 +244,11 @@ module Fingers
     def count_matches
       result = 0
 
-      lines.each do |line|
-        line.scan(pattern) do |match|
-          result += 1
+      pane_inputs.each do |pane_input|
+        pane_input.lines.each do |line|
+          line.scan(pattern) do |match|
+            result += 1
+          end
         end
       end
 
@@ -257,7 +280,5 @@ module Fingers
         " " * spaces
       end
     end
-
-    private property lines : Array(String)
   end
 end

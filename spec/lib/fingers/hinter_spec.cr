@@ -3,6 +3,7 @@ require "../../spec_helper.cr"
 require "../../../src/fingers/hinter"
 require "../../../src/fingers/state"
 require "../../../src/fingers/config"
+require "../../../src/fingers/types"
 
 record StateDouble, selected_hints : Array(String)
 
@@ -29,27 +30,32 @@ def generate_lines
   end.join("\n")
 end
 
+def make_pane_input(input : String, width : Int32 = 100, pane_id : String = "%0") : Fingers::PaneInput
+  Fingers::PaneInput.new(
+    lines: input.split("\n"),
+    printer: TextOutput.new,
+    pane_id: pane_id,
+    width: width,
+  )
+end
+
 describe Fingers::Hinter do
   it "works in a grid of lines" do
-    width = 100
     input = generate_lines
-    output = TextOutput.new
+    pane_input = make_pane_input(input)
 
     patterns = Fingers::Config::BUILTIN_PATTERNS.values.to_a
     alphabet = "asdf".split("")
 
     hinter = Fingers::Hinter.new(
-      input: input.split("\n"),
-      width: width,
+      pane_inputs: [pane_input],
       patterns: patterns,
       state: ::Fingers::State.new,
       alphabet: alphabet,
-      output: output,
     )
   end
 
   it "only highlights captured groups" do
-    width = 100
     input = "
 On branch ruby-rewrite-more-like-crystal-rewrite-amirite
 Your branch is up to date with 'origin/ruby-rewrite-more-like-crystal-rewrite-amirite'.
@@ -68,26 +74,21 @@ Changes not staged for commit:
         modified:   src/fingers/dirs.cr
         modified:   src/fingers/match_formatter.cr
     "
-    output = TextOutput.new
+    pane_input = make_pane_input(input)
 
     patterns = Fingers::Config::BUILTIN_PATTERNS.values.to_a
     patterns << "On branch (?<capture>.*)"
     alphabet = "asdf".split("")
 
     hinter = Fingers::Hinter.new(
-      input: input.split("\n"),
-      width: width,
+      pane_inputs: [pane_input],
       patterns: patterns,
       state: ::Fingers::State.new,
       alphabet: alphabet,
-      output: output,
     )
   end
 
   it "only reuses hints when allow duplicates is false" do
-    width = 100
-    output = TextOutput.new
-
     patterns = Fingers::Config::BUILTIN_PATTERNS.values.to_a
     alphabet = "asdf".split("")
 
@@ -98,12 +99,10 @@ Changes not staged for commit:
     "
 
     hinter = Fingers::Hinter.new(
-      input: input.split("\n"),
-      width: width,
+      pane_inputs: [make_pane_input(input)],
       patterns: patterns,
       state: ::Fingers::State.new,
       alphabet: alphabet,
-      output: output,
       reuse_hints: false
     )
 
@@ -111,9 +110,6 @@ Changes not staged for commit:
   end
 
   it "can rerender when not reusing hints" do
-    width = 100
-    output = TextOutput.new
-
     patterns = Fingers::Config::BUILTIN_PATTERNS.values.to_a
     alphabet = "asdf".split("")
 
@@ -124,12 +120,10 @@ Changes not staged for commit:
     "
 
     hinter = Fingers::Hinter.new(
-      input: input.split("\n"),
-      width: width,
+      pane_inputs: [make_pane_input(input)],
       patterns: patterns,
       state: ::Fingers::State.new,
       alphabet: alphabet,
-      output: output,
       reuse_hints: false
     )
 

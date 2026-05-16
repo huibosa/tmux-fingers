@@ -69,10 +69,13 @@ class Tmux
     property window_id : String
     property pane_width : Int32
     property pane_height : Int32
+    property pane_left : Int32
+    property pane_top : Int32
     property pane_current_path : String
     property pane_in_mode : Bool
     property scroll_position : Int32 | Nil
     property window_zoomed_flag : Bool
+    property pane_tty : String
   end
 
   struct Window
@@ -87,14 +90,17 @@ class Tmux
 
   # TODO make a macro or something
   PANE_FORMAT = build_tmux_format({
-    pane_id:           String,
-    window_id:         String,
-    pane_width:        Int32,
-    pane_height:       Int32,
-    pane_current_path: String,
-    pane_in_mode:      Bool,
-    scroll_position: Int32 | Nil,
+    pane_id:            String,
+    window_id:          String,
+    pane_width:         Int32,
+    pane_height:        Int32,
+    pane_left:          Int32,
+    pane_top:           Int32,
+    pane_current_path:  String,
+    pane_in_mode:       Bool,
+    scroll_position:    Int32 | Nil,
     window_zoomed_flag: Bool,
+    pane_tty:           String,
   })
 
   WINDOW_FORMAT = build_tmux_format({
@@ -196,6 +202,19 @@ class Tmux
   # TODO: this command is version dependant D:
   def resize_window(window_id, width, height)
     exec(["resize-window", "-t", window_id, "-x", width.to_s, "-y", height.to_s].join(' '))
+  end
+
+  def window_layout(window_id) : String
+    exec(["display-message", "-t", window_id, "-p", "'\#{window_layout}'"].join(' ')).chomp
+  end
+
+  def select_layout(window_id, layout)
+    exec(Process.quote(["select-layout", "-t", window_id, layout]))
+  end
+
+  def split_window(window_id) : Pane
+    output = exec("split-window -t #{window_id} -d -P -F '#{PANE_FORMAT}' cat").chomp
+    Pane.from_json(output)
   end
 
   # TODO: this command is version dependant D:

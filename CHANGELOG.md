@@ -1,3 +1,7 @@
+## 2.8.1 - 18 May 2026
+
+* Fix: prefer plugin's own bin/ over PATH binary to prevent update wizard looping when an old system-wide tmux-fingers (e.g. Homebrew) is present
+
 ## 2.8.0 - 18 May 2026
 
 * Add macOS ARM (darwin-arm64) binary built in CI on macos-15

@@ -130,4 +130,28 @@ Changes not staged for commit:
     hinter.run
     hinter.run
   end
+
+  it "stamps each target with the source_pane_id of its pane input" do
+    pane_a = make_pane_input("/tmp/pane_a/foo.txt", pane_id: "%10")
+    pane_b = make_pane_input("/tmp/pane_b/bar.txt", pane_id: "%20")
+
+    patterns = ["(?<match>[^ ]+\\.txt)"]
+    alphabet = "asdf".split("")
+
+    hinter = Fingers::Hinter.new(
+      pane_inputs: [pane_a, pane_b],
+      patterns: patterns,
+      state: ::Fingers::State.new,
+      alphabet: alphabet,
+    )
+
+    hinter.run
+
+    # Collect all resolved targets (single-char hints for 2 matches)
+    targets = alphabet.compact_map { |h| hinter.lookup(h) }
+    source_ids = targets.map(&.source_pane_id).to_set
+
+    source_ids.should contain("%10")
+    source_ids.should contain("%20")
+  end
 end

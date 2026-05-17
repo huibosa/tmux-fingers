@@ -56,4 +56,33 @@ describe Fingers::MatchFormatter do
       result.should eq("#[reset]#[bg=black,fg=white]y#[fg=yellow,bold]a#[reset]#[fg=yellow]loyo#[reset]#[bg=black,fg=white]loyolo#[bg=black,fg=white]")
     end
   end
+
+  context "when highlight contains wide characters" do
+    it "left position: pads with space when a wide char straddles the cut" do
+      # hint "a" (1 col) replaces start of "💡x" (2+1=3 cols).
+      # Consuming 1 col forces eating the 2-col emoji; we add 1 space to keep total width.
+      result = setup(hint_position: "left", hint: "a", highlight: "💡x")
+      result.should eq("#[reset]#[fg=yellow,bold]a#[reset]#[fg=yellow] x#[reset]#[bg=black,fg=white]")
+    end
+
+    it "left position: clean cut when hint width matches a wide char exactly" do
+      # hint "ab" (2 cols) replaces "💡" (2 cols) exactly — no compensation needed.
+      result = setup(hint_position: "left", hint: "ab", highlight: "💡y")
+      result.should eq("#[reset]#[fg=yellow,bold]ab#[reset]#[fg=yellow]y#[reset]#[bg=black,fg=white]")
+    end
+
+    it "right position: pads with space when a wide char straddles the cut" do
+      # hint "a" (1 col) replaces end of "x💡" (1+2=3 cols).
+      # We can only keep "x" (1 col) of the 2 needed before the emoji; pad with 1 space.
+      result = setup(hint_position: "right", hint: "a", highlight: "x💡")
+      result.should eq("#[reset]#[fg=yellow]x #[reset]#[fg=yellow,bold]a#[reset]#[bg=black,fg=white]")
+    end
+
+    it "left position: works with CJK characters" do
+      # hint "a" (1 col) replaces start of "中文" (2+2=4 cols).
+      # Consuming 1 col eats '中' (2 cols); add 1 space to keep width.
+      result = setup(hint_position: "left", hint: "a", highlight: "中文")
+      result.should eq("#[reset]#[fg=yellow,bold]a#[reset]#[fg=yellow] 文#[reset]#[bg=black,fg=white]")
+    end
+  end
 end

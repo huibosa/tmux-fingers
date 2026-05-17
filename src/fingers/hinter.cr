@@ -141,7 +141,7 @@ module Fingers
       hint = hint_for_text(captured_text)
 
       # hint is longer than highlighted text, put it back in hint stack
-      if hint.size > captured_text.size
+      if DisplayWidth.of(hint) > DisplayWidth.of(captured_text)
         hints.push(hint)
         return text
       end

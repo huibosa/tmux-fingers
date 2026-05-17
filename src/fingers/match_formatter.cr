@@ -1,4 +1,5 @@
 require "./config"
+require "./display_width"
 require "./types"
 
 module Fingers
@@ -61,14 +62,39 @@ module Fingers
     end
 
     private def chop_highlight(hint, highlight)
+      hint_w = DisplayWidth.of(hint)
       if hint_position == "right"
-        highlight[0..-(hint.size + 1)] || ""
+        chop_display_width_from_end(highlight, hint_w)
       else
-        highlight[hint.size..-1] || ""
+        chop_display_width_from_start(highlight, hint_w)
       end
     rescue
       puts "failed for hint '#{hint}' and '#{highlight}'"
       ""
+    end
+
+    private def chop_display_width_from_start(highlight, hint_w)
+      consumed_w = 0
+      i = 0
+      highlight.each_char do |char|
+        break if consumed_w >= hint_w
+        consumed_w += DisplayWidth.of(char)
+        i += 1
+      end
+      " " * Math.max(consumed_w - hint_w, 0) + highlight[i..-1]
+    end
+
+    private def chop_display_width_from_end(highlight, hint_w)
+      keep_w = DisplayWidth.of(highlight) - hint_w
+      accumulated_w = 0
+      i = 0
+      highlight.each_char do |char|
+        char_w = DisplayWidth.of(char)
+        break if accumulated_w + char_w > keep_w
+        accumulated_w += char_w
+        i += 1
+      end
+      highlight[0...i] + " " * (keep_w - accumulated_w)
     end
   end
 end

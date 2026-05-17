@@ -41,6 +41,22 @@ describe Fingers::DisplayWidth do
       Fingers::DisplayWidth.of('🚀').should eq 2
     end
 
+    it "Misc Symbols (U+2600–U+26FF) wide emoji are width 2" do
+      Fingers::DisplayWidth.of('⛔').should eq 2  # U+26D4 NO ENTRY
+      Fingers::DisplayWidth.of('⚡').should eq 2  # U+26A1 HIGH VOLTAGE
+      Fingers::DisplayWidth.of('⌚').should eq 2  # U+231A WATCH
+      Fingers::DisplayWidth.of('☔').should eq 2  # U+2614 UMBRELLA WITH RAIN DROPS
+    end
+
+    it "Misc Symbols and Arrows (U+2B00–U+2BFF) wide emoji are width 2" do
+      Fingers::DisplayWidth.of('⭐').should eq 2  # U+2B50 STAR
+      Fingers::DisplayWidth.of('⭕').should eq 2  # U+2B55 HEAVY LARGE CIRCLE
+    end
+
+    it "Symbols and Pictographs Extended-A (U+1FA70+) are width 2" do
+      Fingers::DisplayWidth.of('🪐').should eq 2  # U+1FA90 RINGED PLANET
+    end
+
     it "combining marks are width 0" do
       Fingers::DisplayWidth.of('\u{0300}').should eq 0  # COMBINING GRAVE ACCENT
       Fingers::DisplayWidth.of('\u{200B}').should eq 0  # ZWSP

@@ -7,7 +7,15 @@ on:
 
 jobs:
   dist_linux:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
     container:
       image: crystallang/crystal:1.14-alpine
     steps:
@@ -25,7 +33,7 @@ jobs:
       with:
         upload_url: ${{ github.event.release.upload_url }}
         asset_path: ./bin/tmux-fingers
-        asset_name: tmux-fingers-${{ github.event.release.tag_name }}-linux-x86_64
+        asset_name: tmux-fingers-${{ github.event.release.tag_name }}-linux-${{ matrix.arch }}
         asset_content_type: binary/octet-stream
   dist_homebrew:
     name: Bump Homebrew formula

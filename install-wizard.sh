@@ -59,28 +59,35 @@ function install_with_brew() {
 
 
 function download_binary() {
-  mkdir -p $CURRENT_DIR/bin
+  mkdir -p "$CURRENT_DIR/bin"
 
-  if [[ ! "$(uname -m)" == "x86_64" ]]; then
-    echo "tmux-fingers binaries are only provided for x86_64 architecture."
-    exit 1
-  fi
+  local arch
+  case "$(uname -m)" in
+    x86_64)         arch="x86_64" ;;
+    aarch64|arm64)  arch="aarch64" ;;
+    *)
+      echo "tmux-fingers binaries are not provided for $(uname -m). Try installing from source."
+      exit 1
+      ;;
+  esac
 
-  echo "Getting latest release..."
+  echo "Getting latest release for linux-${arch}..."
 
   # TODO use "latest" tag
-  url=$(curl -s "https://api.github.com/repos/morantron/tmux-fingers/releases" | grep browser_download_url | head -1 | grep -o https://.*x86_64)
+  url=$(curl -s "https://api.github.com/repos/huibosa/tmux-fingers/releases" \
+    | grep "browser_download_url" \
+    | grep -o "https://[^\"]*linux-${arch}" \
+    | head -1)
 
   echo "Downloading binary from $url"
 
   if [[ -z "$url" ]]; then
-    echo "Could not find a release for tmux-fingers. Please try again later."
+    echo "Could not find a release for tmux-fingers (linux-${arch}). Please try again later."
     exit 1
   fi
 
-  # download binary to bin/tmux-fingers
-  curl -L $url -o $CURRENT_DIR/bin/tmux-fingers
-  chmod a+x $CURRENT_DIR/bin/tmux-fingers
+  curl -L "$url" -o "$CURRENT_DIR/bin/tmux-fingers"
+  chmod a+x "$CURRENT_DIR/bin/tmux-fingers"
 
   echo "Download complete!"
   exit 0

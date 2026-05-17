@@ -1,3 +1,13 @@
+## 2.7.0 - 17 May 2026
+
+* Multi-pane fingers mode: `prefix+F` now overlays hints across all visible
+  panes in the active window simultaneously. A zoomed pane degrades to
+  single-pane behavior.
+* Action routing: paste targets the active pane (where fingers was invoked);
+  jump and shell-action chdir target the source pane (where the match lives).
+* Fix hint overlay misalignment on lines containing wide emoji or CJK
+  characters. Implements UAX #11 East Asian Width for column-count calculation.
+
 ## 2.6.2 - 15 Feb 2026
 
 * Fix line jumping and backdrop-style rendering issues related with tabs,

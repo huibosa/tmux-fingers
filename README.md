@@ -46,7 +46,9 @@ Add the following to your list of TPM plugins in `.tmux.conf`:
 set -g @plugin 'Morantron/tmux-fingers'
 ```
 
-Hit <kbd>prefix</kbd> + <kbd>I</kbd> to fetch and source the plugin. The first time you run it you'll be presented with a wizard to complete the installation. Depending on the platform, the wizard will offer the following installation methods:
+Hit <kbd>prefix</kbd> + <kbd>I</kbd> to fetch and source the plugin. On first install (or after a version update), the plugin automatically builds the binary via `shards build --production` if [crystal](https://crystal-lang.org/install/) is available on your PATH. Set `@fingers-skip-wizard 1` to suppress the auto-build.
+
+If you prefer a manual installation, run `install-wizard.sh` directly. It offers the following methods:
 
 - Building from source (requires [crystal](https://crystal-lang.org/install/)). _Available in all platforms_
 - Install through [brew](https://brew.sh). _Mac OS only_.
@@ -72,7 +74,7 @@ Reload TMUX conf by running:
 $ tmux source-file ~/.tmux.conf
 ```
 
-The first time you run it you'll be presented with a wizard to complete the installation.
+On first run (or after a version update), the plugin auto-builds if `crystal`/`shards` is on your PATH. Run `install-wizard.sh` manually if you prefer an interactive installation method.
 
 # Configuration
 

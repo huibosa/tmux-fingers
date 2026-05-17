@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PLATFORM=$(uname -s)
 action=$1
 
 # set up exit trap
@@ -48,46 +47,44 @@ function install_from_source() {
   exit 0
 }
 
-function install_with_brew() {
-  echo "Installing with brew..."
-  brew tap morantron/tmux-fingers
-  brew install tmux-fingers
-
-  echo "Installation complete!"
-  exit 0
-}
-
-
 function download_binary() {
   mkdir -p "$CURRENT_DIR/bin"
 
+  local platform
+  platform=$(uname -s | tr '[:upper:]' '[:lower:]')
+
   local arch
   case "$(uname -m)" in
-    x86_64)         arch="x86_64" ;;
-    aarch64|arm64)  arch="aarch64" ;;
+    x86_64)   arch="x86_64" ;;
+    aarch64)  arch="aarch64" ;;
+    arm64)    arch="arm64" ;;
     *)
       echo "tmux-fingers binaries are not provided for $(uname -m). Try installing from source."
       exit 1
       ;;
   esac
 
-  echo "Getting latest release for linux-${arch}..."
+  echo "Getting latest release for ${platform}-${arch}..."
 
   # TODO use "latest" tag
   url=$(curl -s "https://api.github.com/repos/huibosa/tmux-fingers/releases" \
     | grep "browser_download_url" \
-    | grep -o "https://[^\"]*linux-${arch}" \
+    | grep -o "https://[^\"]*${platform}-${arch}" \
     | head -1)
 
-  echo "Downloading binary from $url"
-
   if [[ -z "$url" ]]; then
-    echo "Could not find a release for tmux-fingers (linux-${arch}). Please try again later."
+    echo "Could not find a release for tmux-fingers (${platform}-${arch}). Please try again later."
     exit 1
   fi
 
+  echo "Downloading binary from $url"
+
   curl -L "$url" -o "$CURRENT_DIR/bin/tmux-fingers"
   chmod a+x "$CURRENT_DIR/bin/tmux-fingers"
+
+  if [[ "$platform" == "darwin" ]]; then
+    xattr -d com.apple.quarantine "$CURRENT_DIR/bin/tmux-fingers" 2>/dev/null || true
+  fi
 
   echo "Download complete!"
   exit 0
@@ -97,30 +94,16 @@ if [[ "$1" == "download-binary" ]]; then
   download_binary
 fi
 
-if [[ "$1" == "install-with-brew" ]]; then
-  echo "Installing with brew..."
-  install_with_brew
-  exit 1
-fi
-
 if [[ "$1" == "install-from-source" ]]; then
   install_from_source
 fi
 
 function binary_or_brew_label() {
-  if [[ "$PLATFORM" == "Darwin" ]]; then
-    echo "Install with brew"
-  else
-    echo "Download binary"
-  fi
+  echo "Download binary"
 }
 
 function binary_or_brew_action() {
-  if [[ "$PLATFORM" == "Darwin" ]]; then
-    echo "install-with-brew"
-  else
-    echo "download-binary"
-  fi
+  echo "download-binary"
 }
 
 function get_message() {

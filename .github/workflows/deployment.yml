@@ -14,16 +14,22 @@ jobs:
         include:
           - runner: ubuntu-latest
             arch: x86_64
+            image: 84codes/crystal:1.14.1-alpine
+            libs_cmd: apk add --update --upgrade --no-cache --force-overwrite libxml2-dev yaml-dev yaml-static
+            build_flags: --production --release --static --no-debug
           - runner: ubuntu-24.04-arm
             arch: aarch64
+            image: 84codes/crystal:1.14.1-ubuntu-24.04
+            libs_cmd: apt-get update && apt-get install -y --no-install-recommends libxml2-dev libyaml-dev
+            build_flags: --production --release --no-debug
     container:
-      image: 84codes/crystal:1.14.1-alpine
+      image: ${{ matrix.image }}
     steps:
     - uses: actions/checkout@v3
     - name: Update Libs
-      run: apk add --update --upgrade --no-cache --force-overwrite libxml2-dev yaml-dev yaml-static
+      run: ${{ matrix.libs_cmd }}
     - name: Build
-      run: shards build --production --release --static --no-debug
+      run: shards build ${{ matrix.build_flags }}
       env:
         WIZARD_INSTALLATION_METHOD: download-binary
     - name: Upload

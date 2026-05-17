@@ -1,3 +1,8 @@
+## 2.8.0 - 18 May 2026
+
+* Add macOS ARM (darwin-arm64) binary built in CI on macos-15
+* Replace macOS Homebrew install default with direct binary download; strip Gatekeeper quarantine flag automatically after download
+
 ## 2.7.0 - 17 May 2026
 
 * Multi-pane fingers mode: `prefix+F` now overlays hints across all visible

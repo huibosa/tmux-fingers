@@ -87,5 +87,15 @@ describe Fingers::DisplayWidth do
     it "handles strings with control chars" do
       Fingers::DisplayWidth.of("a\u{0000}b").should eq 2
     end
+
+    it "text-default emoji with VS-16 (emoji presentation) are width 2" do
+      Fingers::DisplayWidth.of("⚠️").should eq 2   # U+26A0 + U+FE0F  WARNING SIGN
+      Fingers::DisplayWidth.of("ℹ️").should eq 2   # U+2139 + U+FE0F  INFORMATION SOURCE
+      Fingers::DisplayWidth.of("✔️").should eq 2   # U+2714 + U+FE0F  HEAVY CHECK MARK
+    end
+
+    it "bare text-default emoji (no VS-16) stay width 1" do
+      Fingers::DisplayWidth.of("\u{26A0}").should eq 1  # ⚠ without variation selector
+    end
   end
 end

@@ -120,7 +120,19 @@ module Fingers
 
     def self.of(str : String) : Int32
       total = 0
-      str.each_char { |c| total += of(c) }
+      prev_w = -1
+      str.each_char do |c|
+        if c.ord == 0xFE0F && prev_w == 1
+          # VS-16 upgrades a preceding text-default emoji to emoji presentation (2-wide).
+          # The selector itself stays zero-width; we add the missing column here.
+          total += 1
+          prev_w = 2
+          next
+        end
+        w = of(c)
+        total += w
+        prev_w = w
+      end
       total
     end
 
